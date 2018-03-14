@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[cfg(feature = "tls")] use rustls::{Certificate, PrivateKey};
+#[cfg(feature = "tls")] use rustls::{Certificate, PrivateKey, RootCertStore};
 
 use config::{Result, Config, Value, ConfigError, LoggingLevel};
 use http::uncased::uncased_eq;
@@ -42,7 +42,8 @@ impl fmt::Display for SecretKey {
 #[derive(Clone)]
 pub struct TlsConfig {
     pub certs: Vec<Certificate>,
-    pub key: PrivateKey
+    pub key: PrivateKey,
+    pub client_certs: RootCertStore
 }
 
 #[cfg(not(feature = "tls"))]
@@ -227,8 +228,8 @@ pub fn log_level(conf: &Config,
 pub fn tls_config<'v>(conf: &Config,
                                name: &str,
                                value: &'v Value,
-                               ) -> Result<(&'v str, &'v str)> {
-    let (mut certs_path, mut key_path) = (None, None);
+                               ) -> Result<(&'v str, &'v str, &'v str)> {
+    let (mut certs_path, mut key_path, mut client_certs_path) = (None, None, None);
     let table = value.as_table()
         .ok_or_else(|| conf.bad_type(name, value.type_str(), "a table"))?;
 
@@ -237,15 +238,16 @@ pub fn tls_config<'v>(conf: &Config,
         match key.as_str() {
             "certs" => certs_path = Some(str(conf, "tls.certs", value)?),
             "key" => key_path = Some(str(conf, "tls.key", value)?),
+            "client_certs" => client_certs_path = Some(str(conf, "tls.client_certs", value)?),
             _ => return Err(ConfigError::UnknownKey(format!("{}.tls.{}", env, key)))
         }
     }
 
-    if let (Some(certs), Some(key)) = (certs_path, key_path) {
-        Ok((certs, key))
+    if let (Some(certs), Some(key), Some(client_certs)) = (certs_path, key_path, client_certs_path) {
+        Ok((certs, key, client_certs))
     } else {
         Err(conf.bad_type(name, "a table with missing entries",
-                            "a table with `certs` and `key` entries"))
+                            "a table with `certs`, `key`, and `client_certs` entries"))
     }
 }
 
