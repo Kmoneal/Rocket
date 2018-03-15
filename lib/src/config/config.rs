@@ -554,7 +554,7 @@ impl Config {
     /// # }
     /// ```
     #[cfg(feature = "tls")]
-    pub fn set_tls(&mut self, certs_path: &str, key_path: &str, client_certs_path: &str) -> Result<()> {
+    pub fn set_tls(&mut self, certs_path: &str, key_path: &str, client_certs_path: Option<&str>) -> Result<()> {
         use hyper_sync_rustls::util as tls;
         use hyper_sync_rustls::util::Error::Io;
         let pem_err = "malformed PEM file";
@@ -573,13 +573,17 @@ impl Config {
                 _ => self.bad_type("tls", pem_err, "a valid private key file")
             })?;
 
-        // Load client certs
-        let client_certs_vector = tls::load_certs_directory(self.root_relative(client_certs_path))
+        // Load client certs'
+        if client_certs_path == None {
+            self.tls = Some(TlsConfig { certs, key, client_certs: None });
+            return Ok(());
+        };
+        let client_certs_vector = tls::load_certs_directory(self.root_relative(client_certs_path.unwrap()))
             .map_err(|e| match e {
                 Io(e) => ConfigError::Io(e, "tls.client_certs"),
                 _ => self.bad_type("tls", pem_err, "a valid certificates directory")
             })?;
-        let client_certs = tls::root_cert_store_from_certs(client_certs_vector);
+        let client_certs = Some(tls::root_cert_store_from_certs(client_certs_vector));
 
         self.tls = Some(TlsConfig { certs, key, client_certs });
         Ok(())
@@ -587,19 +591,19 @@ impl Config {
 
     #[doc(hidden)]
     #[cfg(not(feature = "tls"))]
-    pub fn set_tls(&mut self, _: &str, _: &str) -> Result<()> {
+    pub fn set_tls(&mut self, _: &str, _: &str, _:Option<&str>) -> Result<()> {
         self.tls = Some(TlsConfig);
         Ok(())
     }
 
     #[cfg(not(test))]
     #[inline(always)]
-    fn set_raw_tls(&mut self, paths: (&str, &str, &str)) -> Result<()> {
+    fn set_raw_tls(&mut self, paths: (&str, &str, Option<&str>)) -> Result<()> {
         self.set_tls(paths.0, paths.1, paths.2)
     }
 
     #[cfg(test)]
-    fn set_raw_tls(&mut self, _: (&str, &str, &str)) -> Result<()> {
+    fn set_raw_tls(&mut self, _: (&str, &str, Option<&str>)) -> Result<()> {
         Ok(())
     }
 

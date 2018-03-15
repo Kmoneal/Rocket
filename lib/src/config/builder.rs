@@ -335,7 +335,7 @@ impl ConfigBuilder {
         config.set_limits(self.limits);
 
         if let Some((certs_path, key_path, client_certs_path)) = self.tls {
-            config.set_tls(&certs_path, &key_path, &client_certs_path)?;
+            config.set_tls(&certs_path, &key_path, Some(&client_certs_path))?;
         }
 
         if let Some(key) = self.secret_key {
