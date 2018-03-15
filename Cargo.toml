@@ -40,4 +40,4 @@ members = [
 ]
 
 [patch.crates-io]
-"hyper-sync-rustls" = { git = "https://github.com/Kmoneal/hyper-sync-rustls", branch = "directory_cert_read" }
+#"hyper-sync-rustls" = { git = "https://github.com/Kmoneal/hyper-sync-rustls", branch = "directory_cert_read" }
