@@ -197,16 +197,42 @@ impl Rocket {
     pub(crate) fn dispatch<'s, 'r>(
         &'s self,
         request: &'r mut Request<'s>,
-        data: Data,
+        data: Data
     ) -> Response<'r> {
         info!("{}:", request);
 
-        // Do a bit of preprocessing before routing; run the attached fairings.
+        // Do a bit of preprocessing before routing.
         self.preprocess_request(request, &data);
+
+        // Run the request fairings.
         self.fairings.handle_request(request, &data);
 
-        // Route the request to get a response.
-        let mut response = match self.route(request, data) {
+        // Remember if the request is a `HEAD` request for later body stripping.
+        let was_head_request = request.method() == Method::Head;
+
+        // Route the request and run the user's handlers.
+        let mut response = self.route_and_process(request, data);
+
+        // Add the 'rocket' server header to the response and run fairings.
+        // TODO: If removing Hyper, write out `Date` header too.
+        response.set_header(Header::new("Server", "Rocket"));
+        self.fairings.handle_response(request, &mut response);
+
+        // Strip the body if this is a `HEAD` request.
+        if was_head_request {
+            response.strip_body();
+        }
+
+        response
+    }
+
+    /// Route the request and process the outcome to eventually get a response.
+    fn route_and_process<'s, 'r>(
+        &'s self,
+        request: &'r Request<'s>,
+        data: Data
+    ) -> Response<'r> {
+        match self.route(request, data) {
             Outcome::Success(mut response) => {
                 // A user's route responded! Set the cookies.
                 for cookie in request.cookies().delta() {
@@ -216,39 +242,20 @@ impl Rocket {
                 response
             }
             Outcome::Forward(data) => {
-                // Rust thinks `request` is still borrowed here, but it's
-                // obviously not (data has nothing to do with it), so we
-                // convince it to give us another mutable reference.
-                // TODO: Use something that is well defined, like UnsafeCell.
-                // But that causes variance issues...so wait for NLL.
-                let request: &'r mut Request<'s> =
-                    unsafe { (&mut *(request as *const _ as *mut _)) };
-
                 // There was no matching route. Autohandle `HEAD` requests.
                 if request.method() == Method::Head {
                     info_!("Autohandling {} request.", Paint::white("HEAD"));
-                    request.set_method(Method::Get);
-                    let mut response = self.dispatch(request, data);
-                    response.strip_body();
-                    response
+
+                    // Dispatch the request again with Method `GET`.
+                    request._set_method(Method::Get);
+                    self.route_and_process(request, data)
                 } else {
+                    // No match was found and it can't be autohandled. 404.
                     self.handle_error(Status::NotFound, request)
                 }
             }
-            Outcome::Failure(status) => self.handle_error(status, request),
-        };
-
-        // Strip the body if this is a `HEAD` request.
-        if request.method() == Method::Head {
-            response.strip_body();
+            Outcome::Failure(status) => self.handle_error(status, request)
         }
-
-        // Add the 'rocket' server header to the response and run fairings.
-        // TODO: If removing Hyper, write out `Date` header too.
-        response.set_header(Header::new("Server", "Rocket"));
-        self.fairings.handle_response(request, &mut response);
-
-        response
     }
 
     /// Tries to find a `Responder` for a given `request`. It does this by
@@ -630,9 +637,9 @@ impl Rocket {
         let collisions = self.router.collisions();
         if !collisions.is_empty() {
             let owned = collisions.iter().map(|&(a, b)| (a.clone(), b.clone()));
-            Some(LaunchError::from(LaunchErrorKind::Collision(owned.collect())))
+            Some(LaunchError::new(LaunchErrorKind::Collision(owned.collect())))
         } else if let Some(failures) = self.fairings.failures() {
-            Some(LaunchError::from(LaunchErrorKind::FailedFairings(failures.to_vec())))
+            Some(LaunchError::new(LaunchErrorKind::FailedFairings(failures.to_vec())))
         } else {
             None
         }
@@ -669,7 +676,7 @@ impl Rocket {
         serve!(self, &full_addr, |server, proto| {
             let mut server = match server {
                 Ok(server) => server,
-                Err(e) => return LaunchError::from(e),
+                Err(e) => return LaunchError::new(LaunchErrorKind::Bind(e)),
             };
 
             // Determine the address and port we actually binded to.

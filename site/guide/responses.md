@@ -150,7 +150,7 @@ whether the error type `E` implements `Responder`.
 When the error type `E` implements `Responder`, the wrapped `Responder` in `Ok`
 or `Err`, whichever it might be, is used to respond to the client. This means
 that the responder can be chosen dynamically at run-time, and two different
-kinds of responses can be used depending on the circumstances. Revisting our
+kinds of responses can be used depending on the circumstances. Revisiting our
 file server, for instance, we might wish to provide more feedback to the user
 when a file isn't found. We might do this as follows:
 
@@ -214,7 +214,7 @@ well-formed JSON data: simply return a value of type `Json<T>` where `T` is the
 type of a structure to serialize into JSON. The type `T` must implement the
 [`Serialize`] trait from [`serde`], which can be automatically derived.
 
-An an example, to respond with the JSON value of a `Task` structure, we might
+As an example, to respond with the JSON value of a `Task` structure, we might
 write:
 
 ```rust

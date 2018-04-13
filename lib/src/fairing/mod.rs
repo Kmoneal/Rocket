@@ -48,6 +48,7 @@
 //! Furthermore, a `Fairing` should take care to act locally so that the actions
 //! of other `Fairings` are not jeopardized. For instance, unless it is made
 //! abundantly clear, a fairing should not rewrite every request.
+
 use {Rocket, Request, Response, Data};
 
 mod fairings;
@@ -131,8 +132,9 @@ pub use self::info_kind::{Info, Kind};
 ///
 ///     A request callback, represented by the
 ///     [`on_request`](/rocket/fairing/trait.Fairing.html#method.on_request)
-///     method, is called just after a request is received. At this point,
-///     Rocket has parsed the incoming HTTP into
+///     method, is called just after a request is received, immediately after
+///     pre-processing the request with method changes due to `_method` form
+///     fields. At this point, Rocket has parsed the incoming HTTP request into
 ///     [`Request`](/rocket/struct.Request.html) and
 ///     [`Data`](/rocket/struct.Data.html) structures but has not routed the
 ///     request. A request callback can modify the request at will and
@@ -150,7 +152,12 @@ pub use self::info_kind::{Info, Kind};
 ///     error catchers, and has generated the would-be final response. A
 ///     response callback can modify the response at will. For exammple, a
 ///     response callback can provide a default response when the user fails to
-///     handle the request by checking for 404 responses.
+///     handle the request by checking for 404 responses. Note that a given
+///     `Request` may have changed between `on_request` and `on_response`
+///     invocations. Apart from any change made by other fairings, Rocket sets
+///     the method for `HEAD` requests to `GET` if there is no matching `HEAD`
+///     handler for that request. Additionally, Rocket will automatically strip
+///     the body for `HEAD` requests _after_ response fairings have run.
 ///
 /// # Implementing
 ///

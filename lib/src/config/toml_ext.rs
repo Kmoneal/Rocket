@@ -3,64 +3,89 @@ use std::collections::BTreeMap;
 
 use config::Value;
 
-pub fn parse_simple_toml_value(string: &str) -> Result<Value, &'static str>  {
-    let string = string.trim();
-    if string.is_empty() {
-        return Err("value is empty")
+use pear::{ParseResult, ParseError};
+use pear::parsers::*;
+use pear::combinators::*;
+
+#[inline(always)]
+pub fn is_whitespace(byte: char) -> bool {
+    byte == ' ' || byte == '\t'
+}
+
+#[inline(always)]
+fn is_not_separator(byte: char) -> bool {
+    match byte {
+        ',' | '{' | '}' | '[' | ']' => false,
+        _ => true
     }
+}
 
-    let value = if let Ok(int) = string.parse::<i64>() {
-        Value::Integer(int)
-    } else if let Ok(float) = string.parse::<f64>() {
-        Value::Float(float)
-    } else if let Ok(boolean) = string.parse::<bool>() {
-        Value::Boolean(boolean)
-    } else if string.starts_with('{') {
-        if !string.ends_with('}') {
-            return Err("value is missing closing '}'")
-        }
+// FIXME: Be more permissive here?
+#[inline(always)]
+fn is_ident_char(byte: char) -> bool {
+    match byte {
+        '0'...'9' | 'A'...'Z' | 'a'...'z' | '_' | '-' => true,
+        _ => false
+    }
+}
 
-        let mut table = BTreeMap::new();
-        let inner = &string[1..string.len() - 1].trim();
-        if !inner.is_empty() {
-            for key_val in inner.split(',') {
-                let (key, val) = match key_val.find('=') {
-                    Some(i) => (&key_val[..i], &key_val[(i + 1)..]),
-                    None => return Err("missing '=' in dicitonary key/value pair")
-                };
+#[parser]
+fn array<'a>(input: &mut &'a str) -> ParseResult<&'a str, Value> {
+    let array = (eat('['), collect!(value(), eat(',')), eat(']')).1;
+    Value::Array(array)
+}
 
-                let key = key.trim().to_string();
-                let val = parse_simple_toml_value(val.trim())?;
-                table.insert(key, val);
+#[parser]
+fn key<'a>(input: &mut &'a str) -> ParseResult<&'a str, String> {
+    take_some_while(is_ident_char).to_string()
+}
+
+#[parser]
+fn table<'a>(input: &mut &'a str) -> ParseResult<&'a str, Value> {
+    eat('{');
+
+    let mut values = BTreeMap::new();
+    try_repeat_while!(eat(','), {
+        let key = surrounded(key, is_whitespace);
+        (eat('='), skip_while(is_whitespace));
+        values.insert(key, value())
+    });
+
+    eat('}');
+    Value::Table(values)
+}
+
+#[parser]
+fn value<'a>(input: &mut &'a str) -> ParseResult<&'a str, Value> {
+    skip_while(is_whitespace);
+    let val = switch! {
+        eat_slice("true") => Value::Boolean(true),
+        eat_slice("false") => Value::Boolean(false),
+        peek('{') => table(),
+        peek('[') => array(),
+        peek('"') => Value::String(delimited('"', |_| true, '"').to_string()),
+        _ => {
+            let value_str = take_some_while(is_not_separator);
+            // FIXME: Silence warning from pear.
+            if let Ok(int) = value_str.parse::<i64>() {
+                Value::Integer(int)
+            } else if let Ok(float) = value_str.parse::<f64>() {
+                Value::Float(float)
+            } else {
+                Value::String(value_str.into())
             }
         }
-
-        Value::Table(table)
-    } else if string.starts_with('[') {
-        if !string.ends_with(']') {
-            return Err("value is missing closing ']'")
-        }
-
-        let mut vals = vec![];
-        let inner = &string[1..string.len() - 1].trim();
-        if !inner.is_empty() {
-            for val_str in inner.split(',') {
-                vals.push(parse_simple_toml_value(val_str.trim())?);
-            }
-        }
-
-        Value::Array(vals)
-    } else if string.starts_with('"') {
-        if !string[1..].ends_with('"') {
-            return Err("value is missing closing '\"'");
-        }
-
-        Value::String(string[1..string.len() - 1].to_string())
-    } else {
-        Value::String(string.to_string())
     };
 
-    Ok(value)
+    skip_while(is_whitespace);
+    val
+}
+
+pub fn parse_simple_toml_value(mut input: &str) -> Result<Value, String> {
+    let result: Result<Value, ParseError<&str>> =
+        parse!(&mut input, (value(), eof()).0).into();
+
+    result.map_err(|e| e.to_string())
 }
 
 /// A simple wrapper over a `Value` reference with a custom implementation of
@@ -92,7 +117,7 @@ impl<'a> fmt::Display for LoggedValue<'a> {
 mod test {
     use std::collections::BTreeMap;
     use super::parse_simple_toml_value;
-    use super::Value::*;
+    use super::Value::{self, *};
 
     macro_rules! assert_parse {
         ($string:expr, $value:expr) => (
@@ -109,7 +134,7 @@ mod test {
         assert_parse!("1.32", Float(1.32));
         assert_parse!("true", Boolean(true));
         assert_parse!("false", Boolean(false));
-        assert_parse!("hello, WORLD!", String("hello, WORLD!".into()));
+        assert_parse!("\"hello, WORLD!\"", String("hello, WORLD!".into()));
         assert_parse!("hi", String("hi".into()));
         assert_parse!("\"hi\"", String("hi".into()));
 
@@ -119,16 +144,36 @@ mod test {
         assert_parse!("[1.32, 2]", Array(vec![1.32.into(), 2.into()]));
 
         assert_parse!("{}", Table(BTreeMap::new()));
+
         assert_parse!("{a=b}", Table({
             let mut map = BTreeMap::new();
             map.insert("a".into(), "b".into());
             map
         }));
+
         assert_parse!("{v=1, on=true,pi=3.14}", Table({
             let mut map = BTreeMap::new();
             map.insert("v".into(), 1.into());
             map.insert("on".into(), true.into());
             map.insert("pi".into(), 3.14.into());
+            map
+        }));
+
+        assert_parse!("{v=[1, 2, 3], v2=[a, \"b\"], on=true,pi=3.14}", Table({
+            let mut map = BTreeMap::new();
+            map.insert("v".into(), vec![1, 2, 3].into());
+            map.insert("v2".into(), vec!["a", "b"].into());
+            map.insert("on".into(), true.into());
+            map.insert("pi".into(), 3.14.into());
+            map
+        }));
+
+        assert_parse!("{v=[[1], [2, 3], [4,5]]}", Table({
+            let mut map = BTreeMap::new();
+            let first: Value = vec![1].into();
+            let second: Value = vec![2, 3].into();
+            let third: Value = vec![4, 5].into();
+            map.insert("v".into(), vec![first, second, third].into());
             map
         }));
     }
