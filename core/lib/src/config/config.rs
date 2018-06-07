@@ -549,12 +549,12 @@ impl Config {
     /// # use rocket::config::ConfigError;
     /// # fn config_test() -> Result<(), ConfigError> {
     /// let mut config = Config::development()?;
-    /// config.set_tls("/etc/ssl/my_certs.pem", "/etc/ssl/priv.key")?;
+    /// config.set_tls("/etc/ssl/my_certs.pem", "/etc/ssl/priv.key", None)?;
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "tls")]
-    pub fn set_tls(&mut self, certs_path: &str, key_path: &str) -> Result<()> {
+    pub fn set_tls(&mut self, certs_path: &str, key_path: &str, cert_store_path: Option<&str>) -> Result<()> {
         use hyper_sync_rustls::util as tls;
         use hyper_sync_rustls::util::Error::Io;
         let pem_err = "malformed PEM file";
@@ -573,25 +573,40 @@ impl Config {
                 _ => self.bad_type("tls", pem_err, "a valid private key file")
             })?;
 
-        self.tls = Some(TlsConfig { certs, key });
+        // Load certs for clients.
+        if cert_store_path == None {
+            self.tls = Some(TlsConfig { certs, key, ca_certs: None });
+            return Ok(());
+        };
+        let ca_cert_vector = tls::load_cert_store_certs(self.root_relative(cert_store_path.unwrap()))
+            .map_err(|e| match e {
+                Io(e) => ConfigError::Io(e, "tls.ca_certs"),
+                _ => self.bad_type("tls", pem_err, "a valid certificate store directory")
+            })?;
+        let ca_certs = Some(tls::generate_cert_store(ca_cert_vector)
+                            .map_err(|e| match e {
+                                _ => self.bad_type("tls", pem_err, "a valid certificate store")
+                            })?);
+
+        self.tls = Some(TlsConfig { certs, key, ca_certs });
         Ok(())
     }
 
     #[doc(hidden)]
     #[cfg(not(feature = "tls"))]
-    pub fn set_tls(&mut self, _: &str, _: &str) -> Result<()> {
+    pub fn set_tls(&mut self, _: &str, _: &str, _:Option<&str>) -> Result<()> {
         self.tls = Some(TlsConfig);
         Ok(())
     }
 
     #[cfg(not(test))]
     #[inline(always)]
-    fn set_raw_tls(&mut self, paths: (&str, &str)) -> Result<()> {
-        self.set_tls(paths.0, paths.1)
+    fn set_raw_tls(&mut self, paths: (&str, &str, Option<&str>)) -> Result<()> {
+        self.set_tls(paths.0, paths.1, paths.2)
     }
 
     #[cfg(test)]
-    fn set_raw_tls(&mut self, _: (&str, &str)) -> Result<()> {
+    fn set_raw_tls(&mut self, _: (&str, &str, Option<&str>)) -> Result<()> {
         Ok(())
     }
 
