@@ -36,6 +36,8 @@ indexmap = "1.0"
 isatty = "0.1"
 
 [dependencies.hyper-sync-rustls]
+git = "https://github.com/Kmoneal/hyper-sync-rustls"
+branch = "feature/mtls"
 version = "=0.3.0-rc.2"
 features = ["server"]
 optional = true
