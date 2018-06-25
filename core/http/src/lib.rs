@@ -27,6 +27,9 @@ pub mod uri;
 #[cfg(feature = "tls")]
 pub mod tls;
 
+#[cfg(feature = "tls")]
+pub mod mtls;
+
 #[macro_use]
 mod docify;
 #[macro_use]
