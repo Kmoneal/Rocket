@@ -34,6 +34,8 @@ features = ["percent-encode", "secure"]
 version = "=0.3.0-rc.2"
 features = ["server"]
 optional = true
+git = "https://github.com/Kmoneal/hyper-sync-rustls"
+branch = "feature/mtls"
 
 [dev-dependencies]
 rocket = { version = "0.4.0-dev", path = "../lib" }
