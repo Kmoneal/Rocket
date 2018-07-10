@@ -55,6 +55,8 @@ pub struct Config {
     pub(crate) secret_key: SecretKey,
     /// TLS configuration.
     pub(crate) tls: Option<TlsConfig>,
+    /// MTLS configuration
+    pub(crate) mtls: Option<MtlsConfig>,
     /// Streaming read size limits.
     pub limits: Limits,
     /// Extra parameters that aren't part of Rocket's core config.
@@ -247,6 +249,7 @@ impl Config {
                     log_level: LoggingLevel::Normal,
                     secret_key: key,
                     tls: None,
+                    mtls: None,
                     limits: Limits::default(),
                     extras: HashMap::new(),
                     config_path: config_path,
@@ -262,6 +265,7 @@ impl Config {
                     log_level: LoggingLevel::Normal,
                     secret_key: key,
                     tls: None,
+                    mtls: None,
                     limits: Limits::default(),
                     extras: HashMap::new(),
                     config_path: config_path,
@@ -277,6 +281,7 @@ impl Config {
                     log_level: LoggingLevel::Critical,
                     secret_key: key,
                     tls: None,
+                    mtls: None,
                     limits: Limits::default(),
                     extras: HashMap::new(),
                     config_path: config_path,
@@ -322,6 +327,7 @@ impl Config {
             log => (log_level, set_log_level, ok),
             secret_key => (str, set_secret_key, id),
             tls => (tls_config, set_raw_tls, id),
+            // mtls => (mtls_config, set_raw_mtls, id),
             limits => (limits, set_limits, ok),
             | _ => {
                 self.extras.insert(name.into(), val.clone());
@@ -549,11 +555,12 @@ impl Config {
     /// # use rocket::config::ConfigError;
     /// # fn config_test() -> Result<(), ConfigError> {
     /// let mut config = Config::development()?;
-    /// config.set_tls("/etc/ssl/my_certs.pem", "/etc/ssl/priv.key", None)?;
+    /// config.set_tls("/etc/ssl/my_certs.pem", "/etc/ssl/priv.key")?;
     /// # Ok(())
     /// # }
     /// ```
     #[cfg(feature = "tls")]
+    // pub fn set_tls(&mut self, certs_path: &str, key_path: &str) -> Result<()> {
     pub fn set_tls(&mut self, certs_path: &str, key_path: &str, cert_store_path: Option<&str>) -> Result<()> {
         use rocket_http::tls::util;
         use rocket_http::tls::util::Error;
@@ -573,29 +580,32 @@ impl Config {
                 _ => self.bad_type("tls", pem_err, "a valid private key file")
             })?;
 
-        // Load certs for clients.
-        if cert_store_path == None {
-            self.tls = Some(TlsConfig { certs, key, ca_certs: None });
-            return Ok(());
-        };
-        let ca_cert_vector = util::load_cert_store_certs(self.root_relative(cert_store_path.unwrap()))
-            .map_err(|e| match e {
-                Error::Io(e) => ConfigError::Io(e, "tls.ca_certs"),
-                _ => self.bad_type("tls", pem_err, "a valid certificate store directory")
-            })?;
-        let ca_certs = Some(util::generate_cert_store(ca_cert_vector)
-                            .map_err(|e| match e {
-                                _ => self.bad_type("tls", pem_err, "a valid certificate store")
-                            })?);
+        self.tls = Some(TlsConfig { certs, key });
 
-        self.tls = Some(TlsConfig { certs, key, ca_certs });
+        // Load certs for clients, if necessary
+        if let Some(path) = cert_store_path {
+            let ca_cert_vector = util::load_cert_store_certs(self.root_relative(path))
+                .map_err(|e| match e {
+                    Error::Io(e) => ConfigError::Io(e, "tls.ca_certs"),
+                    _ => self.bad_type("tls", pem_err, "a valid certificate store directory")
+                })?;
+
+            let ca_certs = util::generate_cert_store(ca_cert_vector)
+                .map_err(|e| match e {
+                    _ => self.bad_type("tls", pem_err, "a valid certificate store")
+                })?;
+
+            self.mtls = Some(MtlsConfig { ca_certs });
+        }
+
         Ok(())
     }
 
     #[doc(hidden)]
     #[cfg(not(feature = "tls"))]
-    pub fn set_tls(&mut self, _: &str, _: &str, _:Option<&str>) -> Result<()> {
+    pub fn set_tls(&mut self, _: &str, _: &str, _: Option<&str>) -> Result<()> {
         self.tls = Some(TlsConfig);
+        self.mtls = Some(MtlsConfig);
         Ok(())
     }
 
@@ -609,6 +619,74 @@ impl Config {
     fn set_raw_tls(&mut self, _: (&str, &str, Option<&str>)) -> Result<()> {
         Ok(())
     }
+
+
+    /// Sets the MTLS configuration in `self`.
+    ///
+    /// TODO: akua
+    /// Certificates are read from `certs_path`. The certificate chain must be
+    /// in X.509 PEM format. The private key is read from `key_path`. The
+    /// private key must be an RSA key in either PKCS#1 or PKCS#8 PEM format.
+    ///
+    /// # Errors
+    ///
+    /// If reading any certificate in `cert_store_path` fails, an error of
+    /// variant `Io` is returned. If any of the certificate files are 
+    /// malformed or cannot be parsed, an error of `BadType` is returned.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use rocket::config::Config;
+    ///
+    /// # use rocket::config::ConfigError;
+    /// # fn config_test() -> Result<(), ConfigError> {
+    /// let mut config = Config::development()?;
+    /// config.set_mtls("/etc/ssl/ca_certs/")?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    // #[cfg(feature = "tls")]
+    // pub fn set_mtls(&mut self, cert_store_path: &str) -> Result<()> {
+    //     use rocket_http::tls::util;
+    //     use rocket_http::tls::util::Error;
+    //     let pem_err = "malformed PEM file";
+
+    //     // Load certs for clients.
+    //     let ca_cert_vector = util::load_cert_store_certs(self.root_relative(cert_store_path))
+    //         .map_err(|e| match e {
+    //             Error::Io(e) => ConfigError::Io(e, "tls.ca_certs"),
+    //             _ => self.bad_type("tls", pem_err, "a valid certificate store directory")
+    //         })?;
+
+    //     let ca_certs = Some(util::generate_cert_store(ca_cert_vector)
+    //         .map_err(|e| match e {
+    //             _ => self.bad_type("tls", pem_err, "a valid certificate store")
+    //         })?);
+
+    //     self.mtls = Some(MtlsConfig { ca_certs });
+
+    //     Ok(())
+    // }
+
+
+    // #[doc(hidden)]
+    // #[cfg(not(feature = "tls"))]
+    // pub fn set_mtls(&mut self, _: &str) -> Result<()> {
+    //     self.mtls = Some(MtlsConfig);
+    //     Ok(())
+    // }
+
+    // #[cfg(not(test))]
+    // #[inline(always)]
+    // fn set_raw_mtls(&mut self, path: &str) -> Result<()> {
+    //     self.set_mtls(path)
+    // }
+
+    // #[cfg(test)]
+    // fn set_raw_mtls(&mut self, _: &str) -> Result<()> {
+    //     Ok(())
+    // }
 
     /// Sets the extras for `self` to be the key/value pairs in `extras`.
     /// encoded string.

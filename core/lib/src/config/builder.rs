@@ -21,7 +21,9 @@ pub struct ConfigBuilder {
     /// The secret key.
     pub secret_key: Option<String>,
     /// TLS configuration (path to certificates file, path to private key file).
-    pub tls: Option<(String, String, String)>,
+    pub tls: Option<(String, String)>,
+    /// Path to directory of CA certificates for client verification.
+    pub ca_certs: Option<String>,
     /// Size limits.
     pub limits: Limits,
     /// Any extra parameters that aren't part of Rocket's config.
@@ -69,6 +71,7 @@ impl ConfigBuilder {
             log_level: config.log_level,
             secret_key: None,
             tls: None,
+            ca_certs: None,
             limits: config.limits,
             extras: config.extras,
             root: root_dir,
@@ -226,12 +229,23 @@ impl ConfigBuilder {
     ///     .unwrap();
     /// # */
     /// ```
-    pub fn tls<C, K, W>(mut self, certs_path: C, key_path: K, cert_store_path: W) -> Self
+    pub fn tls<C, K, W>(mut self, certs_path: C, key_path: K, cert_store_path: Option<W>) -> Self
         where C: Into<String>, K: Into<String>, W: Into<String>
     {
-        self.tls = Some((certs_path.into(), key_path.into(), cert_store_path.into()));
+        self.tls = Some((certs_path.into(), key_path.into()));
+        self.ca_certs = cert_store_path.map(|p| p.into());
         self
     }
+
+    // /// Sets the path to the directory with the CA certificates for client verification.
+    // ///
+    // /// TODO: akua All certificates in `ca_certs_path` are included as candidates for verification.
+    // pub fn mtls(mut self, ca_certs_path: C) -> Self
+    //     where C: Into<String>
+    // {
+    //     self.mutual_ca_certs = Some(ca_certs_path);
+    //     self
+    // }
 
     /// Sets the `environment` in the configuration being built.
     ///
@@ -334,8 +348,9 @@ impl ConfigBuilder {
         config.set_root(self.root);
         config.set_limits(self.limits);
 
-        if let Some((certs_path, key_path, cert_store_path)) = self.tls {
-            config.set_tls(&certs_path, &key_path, Some(&cert_store_path))?;
+        if let Some((certs_path, key_path)) = self.tls {
+            let cert_store_path = self.ca_certs.as_ref().map(|s| s.as_str());
+            config.set_tls(&certs_path, &key_path, cert_store_path)?;
         }
 
         if let Some(key) = self.secret_key {

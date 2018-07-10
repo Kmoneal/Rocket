@@ -99,7 +99,8 @@ macro_rules! serve {
 macro_rules! serve {
     ($rocket:expr, $addr:expr, |$server:ident, $proto:ident| $continue:expr) => ({
         if let Some(tls) = $rocket.config.tls.clone() {
-            let tls = TlsServer::new(tls.certs, tls.key, tls.ca_certs);
+            let ca_certs = $rocket.config.mtls.clone().map(|cfg| cfg.ca_certs);
+            let tls = TlsServer::new(tls.certs, tls.key, ca_certs);
             let ($proto, $server) = ("https://", hyper::Server::https($addr, tls));
             $continue
         } else {
@@ -698,7 +699,7 @@ impl Rocket {
 
             // Freeze managed state for synchronization-free accesses later.
             self.state.freeze();
-
+            
             // Run the launch fairings.
             self.fairings.handle_launch(&self);
 

@@ -43,12 +43,22 @@ impl fmt::Display for SecretKey {
 pub struct TlsConfig {
     pub certs: Vec<Certificate>,
     pub key: PrivateKey,
-    pub ca_certs: Option<RootCertStore>
+    // pub ca_certs: Option<RootCertStore>
 }
 
 #[cfg(not(feature = "tls"))]
 #[derive(Clone)]
 pub struct TlsConfig;
+
+#[cfg(feature = "tls")]
+#[derive(Clone)]
+pub struct MtlsConfig {
+    pub ca_certs: RootCertStore
+}
+
+#[cfg(not(feature = "tls"))]
+#[derive(Clone)]
+pub struct MtlsConfig;
 
 /// Mapping from data type to size limits.
 ///
@@ -249,9 +259,16 @@ pub fn tls_config<'v>(conf: &Config,
         Ok((certs, key, None))
     } else {
         Err(conf.bad_type(name, "a table with missing entries",
-                            "a table with `certs`, `key`, and `ca_certs` entries"))
+            "a table with `certs` and `key` entries"))
     }
 }
+
+// pub fn mtls_config<'v>(conf: &Config, name: &str, value: &'v Value) -> Result<(&'v str)> {
+//     let mut cert_store_path = None;
+//     let path = str(conf, "")
+//     let table = value.as_table()
+//         .ok_or_else(|| conf.bad_type(name, value.type_str(), "a string"))
+// }
 
 pub fn limits(conf: &Config, name: &str, value: &Value) -> Result<Limits> {
     let table = value.as_table()
