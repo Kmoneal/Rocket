@@ -601,15 +601,14 @@ impl Config {
         Ok(())
     }
 
-    #[cfg(not(test))]
     #[inline(always)]
-    fn set_raw_tls(&mut self, paths: (&str, &str, Option<&str>)) -> Result<()> {
-        self.set_tls(paths.0, paths.1, paths.2)
-    }
+    fn set_raw_tls(&mut self, _paths: (&str, &str, Option<&str>)) -> Result<()> {
+        #[cfg(not(test))]
+        { self.set_tls(_paths.0, _paths.1, _paths.2) }
 
-    #[cfg(test)]
-    fn set_raw_tls(&mut self, _: (&str, &str, Option<&str>)) -> Result<()> {
-        Ok(())
+        // During unit testing, we don't want to actually read certs/keys.
+        #[cfg(test)]
+        { Ok(()) }
     }
 
     /// Sets the extras for `self` to be the key/value pairs in `extras`.

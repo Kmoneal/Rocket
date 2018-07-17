@@ -4,8 +4,7 @@
 #![feature(try_trait)]
 #![feature(fnbox)]
 #![feature(never_type)]
-#![feature(proc_macro)]
-#![feature(proc_macro_non_items)]
+#![feature(proc_macro_non_items, use_extern_macros)]
 
 #![recursion_limit="256"]
 
@@ -160,6 +159,6 @@ pub fn ignite() -> Rocket {
 
 /// Alias to [Rocket::custom()](/rocket/struct.Rocket.html#method.custom).
 /// Creates a new instance of `Rocket` with a custom configuration.
-pub fn custom(config: config::Config, log: bool) -> Rocket {
-    Rocket::custom(config, log)
+pub fn custom(config: config::Config) -> Rocket {
+    Rocket::custom(config)
 }
