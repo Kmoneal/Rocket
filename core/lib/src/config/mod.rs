@@ -41,8 +41,8 @@
 //!   * **keep_alive**: _[integer, 'false', or 'none']_ timeout, in seconds, for
 //!     HTTP keep-alive. disabled on 'false' or 'none'
 //!     * examples: `5`, `60`, `false`, `"none"`
-//!   * **log**: _[string]_ how much information to log; one of `"normal"`,
-//!     `"debug"`, or `"critical"`
+//!   * **log**: _[string]_ how much information to log; one of `"off"`,
+//!     `"normal"`, `"debug"`, or `"critical"`
 //!   * **secret_key**: _[string]_ a 256-bit base64 encoded string (44
 //!     characters) to use as the secret key
 //!     * example: `"8Xui8SN4mI+7egV/9dlfYYLGQJeEx4+DwmSQLwDVXJg="`
@@ -996,6 +996,13 @@ mod test {
                           log = "critical"
                       "#.to_string(), TEST_CONFIG_FILENAME), {
                           default_config(Staging).log_level(LoggingLevel::Critical)
+                      });
+
+        check_config!(RocketConfig::parse(r#"
+                          [stage]
+                          log = "off"
+                      "#.to_string(), TEST_CONFIG_FILENAME), {
+                          default_config(Staging).log_level(LoggingLevel::Off)
                       });
     }
 

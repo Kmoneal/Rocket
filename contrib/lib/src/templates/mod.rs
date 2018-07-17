@@ -6,8 +6,10 @@ extern crate glob;
 #[cfg(feature = "handlebars_templates")] mod handlebars_templates;
 mod engine;
 mod context;
+mod metadata;
 
 pub use self::engine::Engines;
+pub use self::metadata::TemplateMetadata;
 
 use self::engine::Engine;
 use self::context::Context;
@@ -287,15 +289,13 @@ impl Template {
     pub fn show<S, C>(rocket: &Rocket, name: S, context: C) -> Option<String>
         where S: Into<Cow<'static, str>>, C: Serialize
     {
-        let ctxt = match rocket.state::<Context>() {
-            Some(ctxt) => ctxt,
-            None => {
-                warn!("Uninitialized template context: missing fairing.");
-                info!("To use templates, you must attach `Template::fairing()`.");
-                info!("See the `Template` documentation for more information.");
-                return None;
-            }
-        };
+        let ctxt = rocket.state::<Context>().or_else(|| {
+            warn!("Uninitialized template context: missing fairing.");
+            info!("To use templates, you must attach `Template::fairing()`.");
+            info!("See the `Template` documentation for more information.");
+            None
+        })?;
+
         Template::render(name, context).finalize(&ctxt).ok().map(|v| v.0)
     }
 
