@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 
 use {Request, Response, Data};
 use local::Client;
-use http::{Header, Cookie};
+use http::{Header, Cookie, tls::Certificate};
 
 /// A structure representing a local request as created by [`Client`].
 ///
@@ -269,6 +269,15 @@ impl<'c> LocalRequest<'c> {
     #[inline]
     pub fn private_cookie(self, cookie: Cookie<'static>) -> Self {
         self.request.cookies().add_original_private(cookie);
+        self
+    }
+
+    /// Add a certificate to this request.
+    pub fn certificate(mut self, cert: Certificate) -> Self {
+        let mut peer_certs = Vec::new();
+        peer_certs.push(cert);
+        self.request_mut().set_peer_certificates(peer_certs);
+
         self
     }
 
