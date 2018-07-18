@@ -274,8 +274,7 @@ impl<'c> LocalRequest<'c> {
 
     /// Add a certificate to this request.
     pub fn certificate(mut self, cert: Certificate) -> Self {
-        let mut peer_certs = Vec::new();
-        peer_certs.push(cert);
+        let peer_certs = vec![cert];
         self.request_mut().set_peer_certificates(peer_certs);
 
         self
