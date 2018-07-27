@@ -81,11 +81,11 @@ pub struct LocalRequest<'c> {
     // Because both a `LocalRequest` and a `LocalResponse` can hold an `Rc` to
     // the same `Request`, _and_ the `LocalRequest` can mutate the request, we
     // must ensure that 1) neither `LocalRequest` not `LocalResponse` are `Sync`
-    // or `Send` and 2) mutatations carried out in `LocalRequest` are _stable_:
+    // or `Send` and 2) mutations carried out in `LocalRequest` are _stable_:
     // they never _remove_ data, and any reallocations (say, for vectors or
     // hashmaps) result in object pointers remaining the same. This means that
     // even if the `Request` is mutated by a `LocalRequest`, those mutations are
-    // not observeable by `LocalResponse`.
+    // not observable by `LocalResponse`.
     //
     // The first is ensured by the embedding of the `Rc` type which is neither
     // `Send` nor `Sync`. The second is more difficult to argue. First, observe
@@ -130,7 +130,7 @@ impl<'c> LocalRequest<'c> {
         unsafe { &mut *self.ptr }
     }
 
-    // This method should _never_ be publically exposed!
+    // This method should _never_ be publicly exposed!
     #[inline(always)]
     fn long_lived_request<'a>(&mut self) -> &'a mut Request<'c> {
         // See the comments in the structure for the argument of correctness.
@@ -221,7 +221,7 @@ impl<'c> LocalRequest<'c> {
     ///     .cookie(Cookie::new("user_id", "12"));
     /// ```
     #[inline]
-    pub fn cookie<'a>(self, cookie: Cookie<'a>) -> Self {
+    pub fn cookie(self, cookie: Cookie) -> Self {
         self.request.cookies().add_original(cookie.into_owned());
         self
     }
@@ -242,7 +242,7 @@ impl<'c> LocalRequest<'c> {
     /// let req = client.get("/").cookies(cookies);
     /// ```
     #[inline]
-    pub fn cookies<'a>(self, cookies: Vec<Cookie<'a>>) -> Self {
+    pub fn cookies(self, cookies: Vec<Cookie>) -> Self {
         for cookie in cookies {
             self.request.cookies().add_original(cookie.into_owned());
         }
@@ -344,11 +344,7 @@ impl<'c> LocalRequest<'c> {
         let req = self.long_lived_request();
         let response = self.client.rocket().dispatch(req, Data::local(self.data));
         self.client.update_cookies(&response);
-
-        LocalResponse {
-            _request: self.request,
-            response: response
-        }
+        LocalResponse { _request: self.request, response }
     }
 
     /// Dispatches the request, returning the response.
@@ -408,11 +404,7 @@ impl<'c> LocalRequest<'c> {
         let req = self.long_lived_request();
         let response = self.client.rocket().dispatch(req, Data::local(data));
         self.client.update_cookies(&response);
-
-        LocalResponse {
-            _request: self.request.clone(),
-            response: response
-        }
+        LocalResponse { _request: self.request.clone(), response }
     }
 }
 

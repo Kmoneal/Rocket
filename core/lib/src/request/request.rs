@@ -534,7 +534,7 @@ impl<'r> Request<'r> {
         self.state.route.get()
     }
 
-    /// Invokes the request guard implemention for `T`, returning its outcome.
+    /// Invokes the request guard implementation for `T`, returning its outcome.
     ///
     /// # Example
     ///
@@ -708,7 +708,7 @@ impl<'r> Request<'r> {
                     Err(_) => continue
                 };
 
-                for cookie_str in raw_str.split(";").map(|s| s.trim()) {
+                for cookie_str in raw_str.split(';').map(|s| s.trim()) {
                     if let Some(cookie) = Cookies::parse_cookie(cookie_str) {
                         cookie_jar.add_original(cookie);
                     }
