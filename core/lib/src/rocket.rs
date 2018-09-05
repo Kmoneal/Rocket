@@ -24,16 +24,16 @@ use fairing::{Fairing, Fairings};
 
 use http::{Method, Status, Header};
 use http::hyper::{self, header};
-use http::uri::Uri;
+use http::uri::Origin;
 
 /// The main `Rocket` type: used to mount routes and catchers and launch the
 /// application.
 pub struct Rocket {
-    pub(crate) config: Config,
+    crate config: Config,
     router: Router,
     default_catchers: HashMap<u16, Catcher>,
     catchers: HashMap<u16, Catcher>,
-    pub(crate) state: Container,
+    crate state: Container,
     fairings: Fairings,
 }
 
@@ -58,7 +58,11 @@ impl hyper::Handler for Rocket {
             Ok(req) => req,
             Err(e) => {
                 error!("Bad incoming request: {}", e);
-                let dummy = Request::new(self, Method::Get, Uri::new("<unknown>"));
+                // TODO: We don't have a request to pass in, so we just
+                // fabricate one. This is weird. We should let the user know
+                // that we failed to parse a request (by invoking some special
+                // handler) instead of doing this.
+                let dummy = Request::new(self, Method::Get, Origin::dummy());
                 let r = self.handle_error(Status::BadRequest, &dummy);
                 return self.issue_response(r, res);
             }
@@ -201,7 +205,7 @@ impl Rocket {
     }
 
     #[inline]
-    pub(crate) fn dispatch<'s, 'r>(
+    crate fn dispatch<'s, 'r>(
         &'s self,
         request: &'r mut Request<'s>,
         data: Data
@@ -277,7 +281,7 @@ impl Rocket {
     // (ensuring `handler` takes an immutable borrow), any caller to `route`
     // should be able to supply an `&mut` and retain an `&` after the call.
     #[inline]
-    pub(crate) fn route<'s, 'r>(
+    crate fn route<'s, 'r>(
         &'s self,
         request: &'r Request<'s>,
         mut data: Data,
@@ -290,7 +294,7 @@ impl Rocket {
             request.set_route(route);
 
             // Dispatch the request to the handler.
-            let outcome = (route.handler)(request, data);
+            let outcome = route.handler.handle(request, data);
 
             // Check if the request processing completed or if the request needs
             // to be forwarded. If it does, continue the loop to try again.
@@ -310,7 +314,11 @@ impl Rocket {
     // catcher is called. If the catcher fails to return a good response, the
     // 500 catcher is executed. If there is no registered catcher for `status`,
     // the default catcher is used.
-    fn handle_error<'r>(&self, status: Status, req: &'r Request) -> Response<'r> {
+    crate fn handle_error<'r>(
+        &self,
+        status: Status,
+        req: &'r Request
+    ) -> Response<'r> {
         warn_!("Responding with {} catcher.", Paint::red(&status));
 
         // Try to get the active catcher but fallback to user's 500 catcher.
@@ -427,7 +435,7 @@ impl Rocket {
         }
 
         Rocket {
-            config: config,
+            config,
             router: Router::new(),
             default_catchers: catcher::defaults::get(),
             catchers: catcher::defaults::get(),
@@ -442,8 +450,12 @@ impl Rocket {
     ///
     /// # Panics
     ///
-    /// The `base` mount point must be a static path. That is, the mount point
-    /// must _not_ contain dynamic path parameters: `<param>`.
+    /// Panics if the `base` mount point is not a valid static path: a valid
+    /// origin URI without dynamic parameters.
+    ///
+    /// Panics if any route's URI is not a valid origin URI. This kind of panic
+    /// is guaranteed not to occur if the routes were generated using Rocket's
+    /// code generation.
     ///
     /// # Examples
     ///
@@ -478,7 +490,7 @@ impl Rocket {
     /// use rocket::handler::Outcome;
     /// use rocket::http::Method::*;
     ///
-    /// fn hi(req: &Request, _: Data) -> Outcome<'static> {
+    /// fn hi<'r>(req: &'r Request, _: Data) -> Outcome<'r> {
     ///     Outcome::from(req, "Hello!")
     /// }
     ///
@@ -488,23 +500,44 @@ impl Rocket {
     /// # }
     /// ```
     #[inline]
-    pub fn mount(mut self, base: &str, routes: Vec<Route>) -> Self {
+    pub fn mount<R: Into<Vec<Route>>>(mut self, base: &str, routes: R) -> Self {
         info!("{}{} '{}':",
               Paint::masked("🛰  "),
               Paint::purple("Mounting"),
               Paint::blue(base));
 
-        if base.contains('<') || !base.starts_with('/') {
-            error_!("Bad mount point: '{}'.", base);
-            error_!("Mount points must be static, absolute URIs: `/example`");
-            panic!("Bad mount point.")
+        if base.contains('<') || base.contains('>') {
+            error_!("Mount point '{}' contains dynamic paramters.", base);
+            panic!("Invalid mount point.");
         }
 
-        for mut route in routes {
-            let uri = Uri::new(format!("{}/{}", base, route.uri));
+        let base_uri = Origin::parse(base)
+            .unwrap_or_else(|e| {
+                error_!("Invalid origin URI '{}' used as mount point.", base);
+                panic!("Error: {}", e);
+            });
 
-            route.set_base(base);
-            route.set_uri(uri.to_string());
+        if base_uri.query().is_some() {
+            error_!("Mount point '{}' contains query string.", base);
+            panic!("Invalid mount point.");
+        }
+
+        if !base_uri.is_normalized() {
+            error_!("Mount point '{}' is not normalized.", base_uri);
+            info_!("Expected: '{}'.", base_uri.to_normalized());
+            panic!("Invalid mount point.");
+        }
+
+        for mut route in routes.into() {
+            let complete_uri = format!("{}/{}", base_uri, route.uri);
+            let uri = Origin::parse_route(&complete_uri)
+                .unwrap_or_else(|e| {
+                    error_!("Invalid route URI: {}", base);
+                    panic!("Error: {}", e)
+                });
+
+            route.set_base(base_uri.clone());
+            route.set_uri(uri.to_normalized());
 
             info_!("{}", route);
             self.router.add(route);
@@ -624,7 +657,9 @@ impl Rocket {
     /// fn main() {
     /// # if false { // We don't actually want to launch the server in an example.
     ///     rocket::ignite()
-    ///         .attach(AdHoc::on_launch(|_| println!("Rocket is launching!")))
+    ///         .attach(AdHoc::on_launch("Launch Message", |_| {
+    ///             println!("Rocket is launching!");
+    ///         }))
     ///         .launch();
     /// # }
     /// }
@@ -641,16 +676,17 @@ impl Rocket {
         self
     }
 
-    pub(crate) fn prelaunch_check(&self) -> Option<LaunchError> {
-        let collisions = self.router.collisions();
-        if !collisions.is_empty() {
-            let owned = collisions.iter().map(|&(a, b)| (a.clone(), b.clone()));
-            Some(LaunchError::new(LaunchErrorKind::Collision(owned.collect())))
-        } else if let Some(failures) = self.fairings.failures() {
-            Some(LaunchError::new(LaunchErrorKind::FailedFairings(failures.to_vec())))
-        } else {
-            None
+    crate fn prelaunch_check(mut self) -> Result<Rocket, LaunchError> {
+        self.router = match self.router.collisions() {
+            Ok(router) => router,
+            Err(e) => return Err(LaunchError::new(LaunchErrorKind::Collision(e)))
+        };
+
+        if let Some(failures) = self.fairings.failures() {
+            return Err(LaunchError::new(LaunchErrorKind::FailedFairings(failures.to_vec())))
         }
+
+        Ok(self)
     }
 
     /// Starts the application server and begins listening for and dispatching
@@ -674,9 +710,10 @@ impl Rocket {
     /// # }
     /// ```
     pub fn launch(mut self) -> LaunchError {
-        if let Some(error) = self.prelaunch_check() {
-            return error;
-        }
+        self = match self.prelaunch_check() {
+            Ok(rocket) => rocket,
+            Err(launch_error) => return launch_error
+        };
 
         self.fairings.pretty_print_counts();
 
@@ -794,7 +831,7 @@ impl Rocket {
     /// fn main() {
     /// # if false { // We don't actually want to launch the server in an example.
     ///     rocket::ignite()
-    ///         .attach(AdHoc::on_launch(|rocket| {
+    ///         .attach(AdHoc::on_launch("Config Printer", |rocket| {
     ///             println!("Rocket launch config: {:?}", rocket.config());
     ///         }))
     ///         .launch();

@@ -95,21 +95,21 @@ impl Catcher {
     /// ```
     #[inline(always)]
     pub fn new(code: u16, handler: ErrorHandler) -> Catcher {
-        Catcher { code: code, handler: handler, is_default: false }
+        Catcher { code, handler, is_default: false }
     }
 
     #[inline(always)]
-    pub(crate) fn handle<'r>(&self, e: Error, r: &'r Request) -> response::Result<'r> {
+    crate fn handle<'r>(&self, e: Error, r: &'r Request) -> response::Result<'r> {
         (self.handler)(e, r)
     }
 
     #[inline(always)]
     fn new_default(code: u16, handler: ErrorHandler) -> Catcher {
-        Catcher { code: code, handler: handler, is_default: true, }
+        Catcher { code, handler, is_default: true, }
     }
 
     #[inline(always)]
-    pub(crate) fn is_default(&self) -> bool {
+    crate fn is_default(&self) -> bool {
         self.is_default
     }
 }

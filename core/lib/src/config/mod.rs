@@ -185,7 +185,7 @@
 //!
 //! fn main() {
 //!     rocket::ignite()
-//!         .attach(AdHoc::on_attach(|rocket| {
+//!         .attach(AdHoc::on_attach("Token Config", |rocket| {
 //!             println!("Adding token managed state from config...");
 //!             let token_val = rocket.config().get_int("token").unwrap_or(-1);
 //!             Ok(rocket.manage(Token(token_val)))
@@ -217,7 +217,7 @@ pub use self::environment::Environment;
 pub use self::config::Config;
 pub use self::builder::ConfigBuilder;
 pub use logger::LoggingLevel;
-pub(crate) use self::toml_ext::LoggedValue;
+crate use self::toml_ext::LoggedValue;
 
 use logger;
 use self::Environment::*;
@@ -262,10 +262,7 @@ impl RocketConfig {
         configs.insert(Production, Config::default(Production, &f).unwrap());
         configs.insert(active_env, config);
 
-        RocketConfig {
-            active_env: active_env,
-            config: configs
-        }
+        RocketConfig { active_env, config: configs }
     }
 
     /// Read the configuration from the `Rocket.toml` file. The file is search
@@ -470,7 +467,7 @@ impl RocketConfig {
 /// # Panics
 ///
 /// If there is a problem, prints a nice error message and bails.
-pub(crate) fn init() -> Config {
+crate fn init() -> Config {
     let bail = |e: ConfigError| -> ! {
         logger::init(LoggingLevel::Debug);
         e.pretty_print();
@@ -480,8 +477,9 @@ pub(crate) fn init() -> Config {
     use self::ConfigError::*;
     let config = RocketConfig::read().unwrap_or_else(|e| {
         match e {
-            ParseError(..) | BadEntry(..) | BadEnv(..) | BadType(..) | Io(..)
-                | BadFilePath(..) | BadEnvVal(..) | UnknownKey(..) => bail(e),
+            | ParseError(..) | BadEntry(..) | BadEnv(..) | BadType(..) | Io(..)
+            | BadFilePath(..) | BadEnvVal(..) | UnknownKey(..)
+            | Missing(..) => bail(e),
             IoError | BadCWD => warn!("Failed reading Rocket.toml. Using defaults."),
             NotFound => { /* try using the default below */ }
         }

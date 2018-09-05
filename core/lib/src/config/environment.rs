@@ -6,7 +6,7 @@ use std::env;
 
 use self::Environment::*;
 
-pub const CONFIG_ENV: &'static str = "ROCKET_ENV";
+pub const CONFIG_ENV: &str = "ROCKET_ENV";
 
 /// An enum corresponding to the valid configuration environments.
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Copy)]
@@ -40,13 +40,13 @@ impl Environment {
     }
 
     /// Returns a string with a comma-separated list of valid environments.
-    pub(crate) fn valid() -> &'static str {
+    crate fn valid() -> &'static str {
         "development, staging, production"
     }
 
     /// Returns a list of all of the possible environments.
     #[inline]
-    pub(crate) fn all() -> [Environment; 3] {
+    crate fn all() -> [Environment; 3] {
         [Development, Staging, Production]
     }
 

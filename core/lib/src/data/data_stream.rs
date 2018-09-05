@@ -14,7 +14,7 @@ pub type InnerStream = Chain<Cursor<Vec<u8>>, BodyReader>;
 /// [Data::open](/rocket/data/struct.Data.html#method.open). The stream contains
 /// all of the data in the body of the request. It exposes no methods directly.
 /// Instead, it must be used as an opaque `Read` structure.
-pub struct DataStream(pub(crate) InnerStream);
+pub struct DataStream(crate InnerStream);
 
 // TODO: Have a `BufRead` impl for `DataStream`. At the moment, this isn't
 // possible since Hyper's `HttpReader` doesn't implement `BufRead`.
@@ -40,7 +40,7 @@ pub fn kill_stream(stream: &mut BodyReader) {
         Ok(FLUSH_LEN) | Err(_) => {
             warn_!("Data left unread. Force closing network stream.");
             let (_, network) = stream.get_mut().get_mut();
-            if let Err(e) = network.close(Shutdown::Both) {
+            if let Err(e) = network.close(Shutdown::Read) {
                 error_!("Failed to close network stream: {:?}", e);
             }
         }

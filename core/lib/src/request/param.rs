@@ -3,8 +3,7 @@ use std::path::PathBuf;
 use std::fmt::Debug;
 use std::borrow::Cow;
 
-use http::uri::{Uri, Segments, SegmentError};
-use http::RawStr;
+use http::{RawStr, uri::{Segments, SegmentError}};
 
 /// Trait to convert a dynamic path segment string to a concrete value.
 ///
@@ -203,7 +202,7 @@ pub trait FromParam<'a>: Sized {
 }
 
 impl<'a> FromParam<'a> for &'a RawStr {
-    type Error = ();
+    type Error = !;
 
     #[inline(always)]
     fn from_param(param: &'a RawStr) -> Result<&'a RawStr, Self::Error> {
@@ -319,7 +318,7 @@ impl<'a> FromSegments<'a> for Segments<'a> {
 ///   * Decoded segment starts with any of: `.` (except `..`), `*`
 ///   * Decoded segment ends with any of: `:`, `>`, `<`
 ///   * Decoded segment contains any of: `/`
-///   * On Windows, decoded segment contains any of: '\'
+///   * On Windows, decoded segment contains any of: `\`
 ///   * Percent-encoding results in invalid UTF8.
 ///
 /// As a result of these conditions, a `PathBuf` derived via `FromSegments` is
@@ -329,33 +328,7 @@ impl<'a> FromSegments<'a> for PathBuf {
     type Error = SegmentError;
 
     fn from_segments(segments: Segments<'a>) -> Result<PathBuf, SegmentError> {
-        let mut buf = PathBuf::new();
-        for segment in segments {
-            let decoded = Uri::percent_decode(segment.as_bytes())
-                .map_err(SegmentError::Utf8)?;
-
-            if decoded == ".." {
-                buf.pop();
-            } else if decoded.starts_with('.') {
-                return Err(SegmentError::BadStart('.'))
-            } else if decoded.starts_with('*') {
-                return Err(SegmentError::BadStart('*'))
-            } else if decoded.ends_with(':') {
-                return Err(SegmentError::BadEnd(':'))
-            } else if decoded.ends_with('>') {
-                return Err(SegmentError::BadEnd('>'))
-            } else if decoded.ends_with('<') {
-                return Err(SegmentError::BadEnd('<'))
-            } else if decoded.contains('/') {
-                return Err(SegmentError::BadChar('/'))
-            } else if cfg!(windows) && decoded.contains('\\') {
-                return Err(SegmentError::BadChar('\\'))
-            } else {
-                buf.push(&*decoded)
-            }
-        }
-
-        Ok(buf)
+        segments.into_path_buf(false)
     }
 }
 

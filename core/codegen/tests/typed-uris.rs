@@ -1,14 +1,14 @@
-#![feature(plugin, decl_macro, custom_derive)]
+#![feature(plugin, decl_macro)]
 #![plugin(rocket_codegen)]
 #![allow(dead_code, unused_variables)]
 
-extern crate rocket;
+#[macro_use] extern crate rocket;
 
 use std::fmt;
 use std::path::PathBuf;
 
 use rocket::http::{RawStr, Cookies};
-use rocket::http::uri::{Uri, UriDisplay, FromUriParam};
+use rocket::http::uri::{Origin, UriDisplay, FromUriParam};
 use rocket::request::Form;
 
 #[derive(FromForm)]
@@ -85,7 +85,7 @@ fn param_and_segments(path: PathBuf, id: usize) -> &'static str { "" }
 fn guarded_segments(cookies: Cookies, path: PathBuf, id: usize) -> &'static str { "" }
 
 macro assert_uri_eq($($uri:expr => $expected:expr,)+) {
-    $(assert_eq!($uri, Uri::from($expected));)+
+    $(assert_eq!($uri, Origin::parse($expected).expect("valid origin URI"));)+
 }
 
 #[test]

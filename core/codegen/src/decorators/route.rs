@@ -6,7 +6,7 @@ use ::{ROUTE_ATTR, ROUTE_INFO_ATTR};
 use parser::{Param, RouteParams};
 use utils::*;
 
-use syntax::codemap::{Span, Spanned, dummy_spanned};
+use syntax::source_map::{Span, Spanned, dummy_spanned};
 use syntax::tokenstream::TokenTree;
 use syntax::ast::{Arg, Ident, Item, Stmt, Expr, MetaItem, Path};
 use syntax::ext::base::{Annotatable, ExtCtxt};
@@ -87,12 +87,10 @@ impl RouteParams {
     }
 
     fn generate_data_statement(&self, ecx: &ExtCtxt) -> Option<Stmt> {
-        let param = self.data_param.as_ref().map(|p| &p.value);
-        let arg = param.and_then(|p| self.annotated_fn.find_input(&p.node.name));
-        if param.is_none() {
-            return None;
-        } else if arg.is_none() {
-            self.missing_declared_err(ecx, param.unwrap());
+        let param = self.data_param.as_ref().map(|p| &p.value)?;
+        let arg = self.annotated_fn.find_input(&param.node.name);
+        if arg.is_none() {
+            self.missing_declared_err(ecx, param);
             return None;
         }
 
@@ -260,9 +258,9 @@ impl RouteParams {
         ).expect("consistent uri macro item")
     }
 
-    fn explode(&self, ecx: &ExtCtxt) -> (LocalInternedString, &str, Path, P<Expr>, P<Expr>) {
+    fn explode(&self, ecx: &ExtCtxt) -> (LocalInternedString, String, Path, P<Expr>, P<Expr>) {
         let name = self.annotated_fn.ident().name.as_str();
-        let path = &self.uri.node.as_str();
+        let path = self.uri.node.to_string();
         let method = method_to_path(ecx, self.method.node);
         let format = self.format.as_ref().map(|kv| kv.value().clone());
         let media_type = option_as_expr(ecx, &media_type_to_expr(ecx, format));

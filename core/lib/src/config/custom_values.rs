@@ -14,14 +14,14 @@ pub enum SecretKey {
 
 impl SecretKey {
     #[inline]
-    pub(crate) fn inner(&self) -> &Key {
+    crate fn inner(&self) -> &Key {
         match *self {
             SecretKey::Generated(ref key) | SecretKey::Provided(ref key) => key
         }
     }
 
     #[inline]
-    pub(crate) fn is_generated(&self) -> bool {
+    crate fn is_generated(&self) -> bool {
         match *self {
             SecretKey::Generated(_) => true,
             _ => false
@@ -80,7 +80,7 @@ pub struct TlsConfig;
 #[derive(Debug, Clone)]
 pub struct Limits {
     // We cache this internally but don't share that fact in the API.
-    pub(crate) forms: u64,
+    crate forms: u64,
     extra: Vec<(String, u64)>
 }
 
@@ -130,7 +130,7 @@ impl Limits {
             "forms" => self.forms = limit,
             _ => {
                 let mut found = false;
-                for tuple in self.extra.iter_mut() {
+                for tuple in &mut self.extra {
                     if tuple.0 == name {
                         tuple.1 = limit;
                         found = true;
@@ -200,7 +200,7 @@ impl fmt::Display for Limits {
 }
 
 pub fn str<'a>(conf: &Config, name: &str, v: &'a Value) -> Result<&'a str> {
-    v.as_str().ok_or(conf.bad_type(name, v.type_str(), "a string"))
+    v.as_str().ok_or_else(|| conf.bad_type(name, v.type_str(), "a string"))
 }
 
 pub fn u64(conf: &Config, name: &str, value: &Value) -> Result<u64> {

@@ -1,10 +1,11 @@
 #![feature(specialization)]
-#![feature(const_fn)]
 #![feature(plugin, decl_macro)]
 #![feature(try_trait)]
 #![feature(fnbox)]
 #![feature(never_type)]
-#![feature(proc_macro_non_items, use_extern_macros)]
+#![feature(proc_macro_non_items)]
+#![feature(crate_visibility_modifier)]
+#![feature(try_from)]
 
 #![recursion_limit="256"]
 
@@ -128,7 +129,11 @@ pub mod error;
 
 // Reexport of HTTP everything.
 pub mod http {
-    // FIXME: This unfortunately doesn't work! See rust-lang/rust#51252.
+    //! Types that map to concepts in HTTP.
+    //!
+    //! This module exports types that map to HTTP concepts or to the underlying
+    //! HTTP library when needed.
+
     #[doc(inline)]
     pub use rocket_http::*;
 }

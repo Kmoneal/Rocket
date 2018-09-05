@@ -13,6 +13,7 @@ pub trait Engine: Send + Sync + 'static {
     fn render<C: Serialize>(&self, name: &str, context: C) -> Option<String>;
 }
 
+#[doc(cfg(feature = "tera_templates"))]
 /// A structure exposing access to templating engines.
 ///
 /// Calling methods on the exposed template engine types may require importing
@@ -62,12 +63,12 @@ pub struct Engines {
 }
 
 impl Engines {
-    pub(crate) const ENABLED_EXTENSIONS: &'static [&'static str] = &[
+    crate const ENABLED_EXTENSIONS: &'static [&'static str] = &[
         #[cfg(feature = "tera_templates")] Tera::EXT,
         #[cfg(feature = "handlebars_templates")] Handlebars::EXT,
     ];
 
-    pub(crate) fn init(templates: &HashMap<String, TemplateInfo>) -> Option<Engines> {
+    crate fn init(templates: &HashMap<String, TemplateInfo>) -> Option<Engines> {
         fn inner<E: Engine>(templates: &HashMap<String, TemplateInfo>) -> Option<E> {
             let named_templates = templates.iter()
                 .filter(|&(_, i)| i.extension == E::EXT)
@@ -91,7 +92,7 @@ impl Engines {
         })
     }
 
-    pub(crate) fn render<C: Serialize>(
+    crate fn render<C: Serialize>(
         &self,
         name: &str,
         info: &TemplateInfo,

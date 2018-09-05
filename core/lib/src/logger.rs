@@ -142,7 +142,7 @@ impl log::Log for RocketLogger {
     }
 }
 
-pub(crate) fn try_init(level: LoggingLevel, verbose: bool) -> bool {
+crate fn try_init(level: LoggingLevel, verbose: bool) -> bool {
     if level == LoggingLevel::Off {
         return false;
     }
@@ -192,13 +192,13 @@ fn usize_to_filter(num: usize) -> log::LevelFilter {
     }
 }
 
-pub(crate) fn push_max_level(level: LoggingLevel) {
+crate fn push_max_level(level: LoggingLevel) {
     LAST_LOG_FILTER.store(filter_to_usize(log::max_level()), Ordering::Release);
     PUSHED.store(true, Ordering::Release);
     log::set_max_level(level.to_level_filter());
 }
 
-pub(crate) fn pop_max_level() {
+crate fn pop_max_level() {
     if PUSHED.load(Ordering::Acquire) {
         log::set_max_level(usize_to_filter(LAST_LOG_FILTER.load(Ordering::Acquire)));
     }
@@ -207,4 +207,15 @@ pub(crate) fn pop_max_level() {
 #[doc(hidden)]
 pub fn init(level: LoggingLevel) -> bool {
     try_init(level, true)
+}
+
+// This method exists as a shim for the log macros that need to be called from
+// an end user's code. It was added as part of the work to support database
+// connection pools via procedural macros.
+#[doc(hidden)]
+pub fn log_err(indented: bool, msg: &str) {
+    match indented {
+        true => error_!("{}", msg),
+        false => error!("{}", msg),
+    }
 }
